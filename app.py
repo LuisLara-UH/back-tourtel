@@ -1,15 +1,33 @@
-from PIL import Image, ImageOps
 from fastapi import FastAPI, File, UploadFile
 from fastapi.responses import StreamingResponse
 from ultralytics import YOLO
 import numpy as np
 import cv2
+import torch
+from torchvision import transforms
+from torchvision.models.segmentation import deeplabv3_resnet101
+from PIL import Image, ImageOps, ImageChops
 from io import BytesIO
+from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()
 
-# Load your YOLO model (adjust the model path as necessary)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 model = YOLO('yolov8s.pt')  # Replace with your actual model file
+
+segmentation_model = deeplabv3_resnet101(pretrained=True).eval()
+
+preprocess = transforms.Compose([
+    transforms.ToTensor(),
+    transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+])
 
 
 @app.post("/merge-images/")
@@ -43,14 +61,28 @@ async def merge_images(files: list[UploadFile] = File(...)):
                     # Extract the person from the image
                     person_roi = image[y1:y2, x1:x2]
 
-                    # Convert ROI to PIL Image format for easy pasting
+                    # Convert ROI to PIL Image format for processing
                     person_pil = Image.fromarray(cv2.cvtColor(person_roi, cv2.COLOR_BGR2RGB))
 
-                    # Create a mask for pasting
-                    mask = ImageOps.invert(person_pil.convert('L'))
+                    # Preprocess the image for the segmentation model
+                    input_tensor = preprocess(person_pil).unsqueeze(0)
 
-                    # Paste the extracted person onto the base image
-                    base_pil_image.paste(person_pil, (x1, y1), mask)
+                    # Perform the segmentation
+                    with torch.no_grad():
+                        output = segmentation_model(input_tensor)['out'][0]
+                    output_predictions = output.argmax(0).byte().cpu().numpy()
+
+                    # Create a mask for the person
+                    person_mask = (output_predictions == 15).astype(np.uint8)  # Class '15' is 'person' in COCO dataset
+
+                    # Convert the mask to a PIL Image
+                    mask_pil = Image.fromarray(person_mask * 255, mode='L')
+
+                    # Extract the segmented person using the mask
+                    person_segmented_pil = ImageChops.multiply(person_pil, mask_pil.convert('RGB'))
+
+                    # Paste the segmented person onto the base image with the mask
+                    base_pil_image.paste(person_segmented_pil, (x1, y1), mask_pil)
 
     # Save the merged image into a BytesIO object
     merged_image_io = BytesIO()
