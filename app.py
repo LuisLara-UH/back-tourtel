@@ -1,5 +1,5 @@
 from fastapi import FastAPI, File, UploadFile
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, FileResponse
 from ultralytics import YOLO
 import numpy as np
 import cv2
@@ -9,6 +9,8 @@ from torchvision.models.segmentation import deeplabv3_resnet101
 from PIL import Image, ImageOps, ImageChops
 from io import BytesIO
 from fastapi.middleware.cors import CORSMiddleware
+import uuid
+import os
 
 app = FastAPI()
 
@@ -28,6 +30,9 @@ preprocess = transforms.Compose([
     transforms.ToTensor(),
     transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
 ])
+
+image_dir = 'saved_images'
+os.makedirs(image_dir, exist_ok=True)
 
 
 @app.post("/merge-images/")
@@ -84,9 +89,17 @@ async def merge_images(files: list[UploadFile] = File(...)):
                     # Paste the segmented person onto the base image with the mask
                     base_pil_image.paste(person_segmented_pil, (x1, y1), mask_pil)
 
-    # Save the merged image into a BytesIO object
-    merged_image_io = BytesIO()
-    base_pil_image.save(merged_image_io, format='JPEG')
-    merged_image_io.seek(0)
+    # Save the merged image to the filesystem
+    image_id = str(uuid.uuid4())
+    image_path = os.path.join(image_dir, f"{image_id}.jpg")
+    base_pil_image.save(image_path, format='JPEG')
 
-    return StreamingResponse(merged_image_io, media_type="image/jpeg")
+    return {"url": f"http://146.59.160.23:8000/image/{image_id}"}
+
+
+@app.get("/image/{image_id}")
+async def get_image(image_id: str):
+    image_path = os.path.join(image_dir, f"{image_id}.jpg")
+    if os.path.exists(image_path):
+        return FileResponse(image_path, media_type='image/jpeg')
+    return {"error": "Image not found"}
