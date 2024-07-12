@@ -1,18 +1,24 @@
-from fastapi import FastAPI, File, UploadFile
-from fastapi.responses import StreamingResponse, FileResponse
+from io import BytesIO
+
+from fastapi import FastAPI, File, UploadFile, HTTPException, Request
+from fastapi.responses import StreamingResponse
+from PIL import Image, ImageOps, ImageChops
 from ultralytics import YOLO
+from os import path, getcwd, environ, remove
+from uuid import uuid4
+
 import numpy as np
 import cv2
-import torch
-from torchvision import transforms
-from torchvision.models.segmentation import deeplabv3_resnet101
-from PIL import Image, ImageOps, ImageChops
-from io import BytesIO
+import requests
+import json
 from fastapi.middleware.cors import CORSMiddleware
-import uuid
-import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 app = FastAPI()
+
+images_dir = path.join(getcwd(), 'saved_images')
 
 app.add_middleware(
     CORSMiddleware,
@@ -22,17 +28,32 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-model = YOLO('yolov8s.pt')  # Replace with your actual model file
+model = YOLO('yolov8s.pt')
 
-segmentation_model = deeplabv3_resnet101(pretrained=True).eval()
+API_KEY = environ.get('API_KEY')
+SERVER_URL = environ.get('SERVER_URL')
 
-preprocess = transforms.Compose([
-    transforms.ToTensor(),
-    transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-])
 
-image_dir = 'saved_images'
-os.makedirs(image_dir, exist_ok=True)
+def get_segmentation_mask(image_url):
+    url = "https://modelslab.com/api/v6/image_editing/removebg_mask"
+    payload = json.dumps({
+        "key": API_KEY,
+        "image": image_url,
+        "post_process_mask": False,
+        "only_mask": True,
+        "alpha_matting": False
+    })
+    headers = {
+        'Content-Type': 'application/json'
+    }
+    response = requests.request("POST", url, headers=headers, data=payload)
+    if response.status_code == 200:
+        mask_url = response.json().get('output_url')
+        if mask_url:
+            mask_response = requests.get(mask_url)
+            if mask_response.status_code == 200:
+                return Image.open(BytesIO(mask_response.content))
+    return None
 
 
 @app.post("/merge-images/")
@@ -45,7 +66,10 @@ async def merge_images(files: list[UploadFile] = File(...)):
         np_image = np.frombuffer(contents, np.uint8)
         image = cv2.imdecode(np_image, cv2.IMREAD_COLOR)
 
-        # Use the first image as the base
+        # Save the image temporarily to get a URL for the API request
+        temp_image_path = path.join(images_dir, f"temp_{uuid4().hex}.jpg")
+        cv2.imwrite(temp_image_path, image)
+
         if i == 0:
             base_pil_image = Image.fromarray(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
             continue
@@ -69,37 +93,42 @@ async def merge_images(files: list[UploadFile] = File(...)):
                     # Convert ROI to PIL Image format for processing
                     person_pil = Image.fromarray(cv2.cvtColor(person_roi, cv2.COLOR_BGR2RGB))
 
-                    # Preprocess the image for the segmentation model
-                    input_tensor = preprocess(person_pil).unsqueeze(0)
+                    # Save the person image temporarily to get a URL for the API request
+                    person_image_path = path.join(images_dir, f"person_{uuid4().hex}.jpg")
+                    person_pil.save(person_image_path)
+                    person_image_url = f"{SERVER_URL}/image/{path.basename(person_image_path)}"
 
-                    # Perform the segmentation
-                    with torch.no_grad():
-                        output = segmentation_model(input_tensor)['out'][0]
-                    output_predictions = output.argmax(0).byte().cpu().numpy()
+                    # Get the segmentation mask from the API
+                    mask_pil = get_segmentation_mask(person_image_url)
 
-                    # Create a mask for the person
-                    person_mask = (output_predictions == 15).astype(np.uint8)  # Class '15' is 'person' in COCO dataset
+                    if mask_pil:
+                        # Extract the segmented person using the mask
+                        person_segmented_pil = ImageChops.multiply(person_pil, mask_pil.convert('RGB'))
 
-                    # Convert the mask to a PIL Image
-                    mask_pil = Image.fromarray(person_mask * 255, mode='L')
+                        # Paste the segmented person onto the base image with the mask
+                        base_pil_image.paste(person_segmented_pil, (x1, y1), mask_pil)
 
-                    # Extract the segmented person using the mask
-                    person_segmented_pil = ImageChops.multiply(person_pil, mask_pil.convert('RGB'))
+                    try:
+                        remove(person_image_path)
+                    except OSError as e:
+                        print(f"Error: {person_image_path} : {e.strerror}")
 
-                    # Paste the segmented person onto the base image with the mask
-                    base_pil_image.paste(person_segmented_pil, (x1, y1), mask_pil)
+        # Generate a unique filename for the merged image
+        merged_file_name = f"{uuid4().hex}.jpg"
+        merged_image_path = path.join(images_dir, merged_file_name)
 
-    # Save the merged image to the filesystem
-    image_id = str(uuid.uuid4())
-    image_path = os.path.join(image_dir, f"{image_id}.jpg")
-    base_pil_image.save(image_path, format='JPEG')
+        # Save the merged image to the disk
+        base_pil_image.save(merged_image_path, format='JPEG')
 
-    return {"url": f"http://146.59.160.23:8000/image/{image_id}"}
+        # Return the URL for fetching the merged image
+        return {"message": "Images merged successfully", "image_url": f"{SERVER_URL}/image/{merged_file_name}"}
 
 
-@app.get("/image/{image_id}")
-async def get_image(image_id: str):
-    image_path = os.path.join(image_dir, f"{image_id}.jpg")
-    if os.path.exists(image_path):
-        return FileResponse(image_path, media_type='image/jpeg')
-    return {"error": "Image not found"}
+@app.get("/image/{image_file}")
+async def get_merged_image(image_file: str, request: Request):
+    image_path = path.join(images_dir, image_file)
+    if not path.exists(image_path):
+        raise HTTPException(status_code=404, detail="Image not found")
+
+    image_file = open(image_path, "rb")
+    return StreamingResponse(image_file, media_type="image/jpeg")
