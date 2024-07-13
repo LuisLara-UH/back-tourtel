@@ -98,7 +98,7 @@ async def merge_images(files: list[UploadFile] = File(...)):
         base_pil_image.save(merged_image_path, format='JPEG')
 
         # Return the URL for fetching the merged image
-        return {"message": "Images merged successfully", "image_url": f"{SERVER_URL}/image/{merged_file_name}"}
+        return {"message": "Images merged successfully", "image_url": f"{merged_file_name}"}
 
     finally:
         # Remove all temporary files
