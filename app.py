@@ -130,7 +130,7 @@ async def get_merged_image(image_file: str, request: Request):
     # Calculate cropping area for the original image
     left = (original_image.width - new_width) // 2
     right = left + new_width
-    cropped_image = original_image.crop((left, 0, right, original_image.height * 0.9))
+    cropped_image = original_image.crop((left, 0, right, original_image.height * 0.8))
 
     # Create a new canvas for the cropped image with a white border
     bordered_image = Image.new("RGB", (new_width + 2 * border, original_image.height + 2 * border), "white")
@@ -140,8 +140,8 @@ async def get_merged_image(image_file: str, request: Request):
     combined_image.paste(bordered_image, (0, padding))
 
     # Resize frame image to be smaller and calculate the position at the bottom
-    frame_scale_factor = 0.5  # Adjust this value to control the size of the frame image
-    frame_image = frame_image.resize((new_width + 2 * border, int((original_image.height * frame_scale_factor) / 2)))
+    frame_scale_factor = 0.42  # Adjust this value to control the size of the frame image
+    frame_image = frame_image.resize((new_width + border, int((original_image.height * frame_scale_factor) / 2)))
 
     # Calculate position to paste the frame image at the bottom
     frame_x = 0
