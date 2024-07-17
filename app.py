@@ -1,6 +1,6 @@
 from fastapi import FastAPI, File, UploadFile, HTTPException, Request
 from fastapi.responses import StreamingResponse
-from PIL import Image, ImageOps, ImageChops
+from PIL import Image, ImageOps, ImageDraw
 from ultralytics import YOLO
 from os import path, getcwd, environ, remove
 from uuid import uuid4
@@ -8,13 +8,15 @@ import numpy as np
 import cv2
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
-from remove_background import remove_background  # Import your function
+from remove_background import remove_background
+import io
 
 load_dotenv()
 
 app = FastAPI()
 
 images_dir = path.join(getcwd(), 'saved_images')
+frame_image_path = "assets/HorizontalLogoTourtel.png"
 
 app.add_middleware(
     CORSMiddleware,
@@ -113,5 +115,44 @@ async def get_merged_image(image_file: str, request: Request):
     if not path.exists(image_path):
         raise HTTPException(status_code=404, detail="Image not found")
 
-    image_file = open(image_path, "rb")
-    return StreamingResponse(image_file, media_type="image/jpeg")
+    original_image = Image.open(image_path)
+    frame_image = Image.open(frame_image_path)
+
+    # Define padding and new dimensions
+    padding = 10
+    border = 10
+    new_width = original_image.width // 2
+    new_height = original_image.height + 2 * padding
+
+    # Create a new image with padding and background color
+    combined_image = Image.new("RGB", (new_width + 2 * border, new_height + 2 * border), "white")
+
+    # Calculate cropping area for the original image
+    left = (original_image.width - new_width) // 2
+    right = left + new_width
+    cropped_image = original_image.crop((left, 0, right, original_image.height * 0.9))
+
+    # Create a new canvas for the cropped image with a white border
+    bordered_image = Image.new("RGB", (new_width + 2 * border, original_image.height + 2 * border), "white")
+    bordered_image.paste(cropped_image, (border, border))
+
+    # Paste the bordered cropped image onto the combined image
+    combined_image.paste(bordered_image, (0, padding))
+
+    # Resize frame image to be smaller and calculate the position at the bottom
+    frame_scale_factor = 0.5  # Adjust this value to control the size of the frame image
+    frame_image = frame_image.resize((new_width + 2 * border, int((original_image.height * frame_scale_factor) / 2)))
+
+    # Calculate position to paste the frame image at the bottom
+    frame_x = 0
+    frame_y = new_height + 2 * border - frame_image.height
+
+    # Paste frame image on the combined image
+    combined_image.paste(frame_image, (frame_x, frame_y), frame_image)
+
+    # Convert combined image to bytes
+    image_bytes = io.BytesIO()
+    combined_image.save(image_bytes, format="JPEG")
+    image_bytes.seek(0)
+
+    return StreamingResponse(image_bytes, media_type="image/jpeg")
