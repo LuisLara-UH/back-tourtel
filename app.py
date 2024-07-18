@@ -190,9 +190,10 @@ async def get_merged_image(image_file: str, request: Request):
 
     # Define padding and new dimensions
     padding = 10
-    border = 10
+    border = 40
+    scale_factor = 1.2  # Scale factor to increase the height of the cropped image
     new_width = original_image.width // 2
-    new_height = original_image.height + 2 * padding
+    new_height = int(original_image.height * scale_factor) + 2 * padding
 
     # Create a new image with padding and background color
     combined_image = Image.new("RGB", (new_width + 2 * border, new_height + 2 * border), "white")
@@ -200,10 +201,10 @@ async def get_merged_image(image_file: str, request: Request):
     # Calculate cropping area for the original image
     left = (original_image.width - new_width) // 2 + horizontal_displacement
     right = left + new_width
-    cropped_image = original_image.crop((left, 0, right, original_image.height * 0.8))
+    cropped_image = original_image.crop((left, 0, right, int(original_image.height * 0.8 * scale_factor)))
 
     # Create a new canvas for the cropped image with a white border
-    bordered_image = Image.new("RGB", (new_width + 2 * border, original_image.height + 2 * border), "white")
+    bordered_image = Image.new("RGB", (new_width + 2 * border, int(original_image.height * 0.8 * scale_factor) + 2 * border), "white")
     bordered_image.paste(cropped_image, (border, border))
 
     # Paste the bordered cropped image onto the combined image
@@ -227,3 +228,4 @@ async def get_merged_image(image_file: str, request: Request):
     image_bytes.seek(0)
 
     return StreamingResponse(image_bytes, media_type="image/jpeg")
+
