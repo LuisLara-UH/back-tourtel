@@ -1,5 +1,5 @@
-from fastapi import FastAPI, File, UploadFile, HTTPException, Request
-from fastapi.responses import StreamingResponse
+from fastapi import FastAPI, File, UploadFile, HTTPException, Request, Form
+from fastapi.responses import StreamingResponse, HTMLResponse
 from PIL import Image, ImageOps, ImageDraw
 from ultralytics import YOLO
 from os import path, getcwd, environ, remove
@@ -17,6 +17,8 @@ app = FastAPI()
 
 images_dir = path.join(getcwd(), 'saved_images')
 frame_image_path = "assets/HorizontalLogoTourtel.png"
+
+left_position = -1
 
 app.add_middleware(
     CORSMiddleware,
@@ -109,8 +111,76 @@ async def merge_images(files: list[UploadFile] = File(...)):
                 remove(temp_file)
 
 
+@app.get("/crop-form/", response_class=HTMLResponse)
+async def crop_form():
+    html_content = """
+    <html>
+        <head>
+            <title>Crop Image</title>
+            <style>
+                body {
+                    font-family: Arial, sans-serif;
+                    background-color: #f4f4f4;
+                    display: flex;
+                    justify-content: center;
+                    align-items: center;
+                    height: 100vh;
+                    margin: 0;
+                }
+                form {
+                    background-color: #fff;
+                    padding: 20px;
+                    border-radius: 8px;
+                    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+                    width: 300px;
+                    text-align: center;
+                }
+                label, input {
+                    display: block;
+                    width: 100%;
+                    margin-bottom: 10px;
+                }
+                input[type="number"] {
+                    padding: 8px;
+                    border: 1px solid #ccc;
+                    border-radius: 4px;
+                }
+                input[type="submit"] {
+                    background-color: #4CAF50;
+                    color: white;
+                    padding: 10px 15px;
+                    border: none;
+                    border-radius: 4px;
+                    cursor: pointer;
+                }
+                input[type="submit"]:hover {
+                    background-color: #45a049;
+                }
+            </style>
+        </head>
+        <body>
+            <form action="/crop-image/" method="post">
+                <label for="x_position">X-axis Position (pixels):</label>
+                <input type="number" id="x_position" name="x_position" value="0" required><br><br>
+                <input type="submit" value="Set Cropped Image Position">
+            </form>
+        </body>
+    </html>
+    """
+    return HTMLResponse(content=html_content)
+
+
+@app.post("/crop-image/")
+async def crop_image(x_position: int = Form(0)):
+    global left_position
+    left_position = x_position
+    return {"message": "Position value received", "x_position": x_position}
+
+
 @app.get("/image/{image_file}")
 async def get_merged_image(image_file: str, request: Request):
+    global left_position
+
     image_path = path.join(images_dir, image_file)
     if not path.exists(image_path):
         raise HTTPException(status_code=404, detail="Image not found")
@@ -128,7 +198,10 @@ async def get_merged_image(image_file: str, request: Request):
     combined_image = Image.new("RGB", (new_width + 2 * border, new_height + 2 * border), "white")
 
     # Calculate cropping area for the original image
-    left = (original_image.width - new_width) // 2
+    if left_position < 0:
+        left = (original_image.width - new_width) // 2
+    else:
+        left = left_position
     right = left + new_width
     cropped_image = original_image.crop((left, 0, right, original_image.height * 0.8))
 
