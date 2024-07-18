@@ -18,7 +18,7 @@ app = FastAPI()
 images_dir = path.join(getcwd(), 'saved_images')
 frame_image_path = "assets/HorizontalLogoTourtel.png"
 
-left_position = -1
+horizontal_displacement = 0
 
 app.add_middleware(
     CORSMiddleware,
@@ -172,14 +172,14 @@ async def crop_form():
 
 @app.post("/crop-image/")
 async def crop_image(x_position: int = Form(0)):
-    global left_position
-    left_position = x_position
+    global horizontal_displacement
+    horizontal_displacement = x_position
     return {"message": "Position value received", "x_position": x_position}
 
 
 @app.get("/image/{image_file}")
 async def get_merged_image(image_file: str, request: Request):
-    global left_position
+    global horizontal_displacement
 
     image_path = path.join(images_dir, image_file)
     if not path.exists(image_path):
@@ -198,10 +198,7 @@ async def get_merged_image(image_file: str, request: Request):
     combined_image = Image.new("RGB", (new_width + 2 * border, new_height + 2 * border), "white")
 
     # Calculate cropping area for the original image
-    if left_position < 0:
-        left = (original_image.width - new_width) // 2
-    else:
-        left = left_position
+    left = (original_image.width - new_width) // 2 + horizontal_displacement
     right = left + new_width
     cropped_image = original_image.crop((left, 0, right, original_image.height * 0.8))
 
