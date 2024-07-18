@@ -140,11 +140,12 @@ async def get_merged_image(image_file: str, request: Request):
     combined_image.paste(bordered_image, (0, padding))
 
     # Resize frame image to be smaller and calculate the position at the bottom
-    frame_scale_factor = 0.42  # Adjust this value to control the size of the frame image
-    frame_image = frame_image.resize((new_width + border, int((original_image.height * frame_scale_factor) / 2)))
+    frame_scale_factor = 0.42
+    frame_width = int(new_width * 0.8)
+    frame_image = frame_image.resize((frame_width, int((original_image.height * frame_scale_factor) / 2)))
 
     # Calculate position to paste the frame image at the bottom
-    frame_x = 0
+    frame_x = int(frame_width / 7.5)
     frame_y = new_height + 2 * border - frame_image.height
 
     # Paste frame image on the combined image
