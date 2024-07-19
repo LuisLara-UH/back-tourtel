@@ -202,7 +202,7 @@ async def get_merged_image(image_file: str, request: Request):
     # Calculate cropping area for the original image
     left = (new_width - result_width + 2 * border) // 2 + horizontal_displacement
     right = left + result_width - 2 * border
-    cropped_image = original_image.resize((new_width, new_height)).crop((left, 0, right, new_height))
+    cropped_image = original_image.resize((new_width, new_height), Image.LANCZOS).crop((left, 0, right, new_height))
 
     # Create a new canvas for the cropped image with a white border
     bordered_image = Image.new("RGB", (result_width, new_height + 2 * border), "white")
@@ -213,9 +213,15 @@ async def get_merged_image(image_file: str, request: Request):
     combined_image.paste(bordered_image, (0, padding))
 
     # Resize frame image to fit within the bottom area
-    frame_scale_factor = 0.12
-    frame_width = int(result_width * 0.5)
-    frame_image = frame_image.resize((frame_width, int(frame_scale_factor * frame_image.width)))
+    frame_scale_factor = 0.35
+    frame_width = int(frame_scale_factor * frame_image.width)
+    frame_image = frame_image.resize(
+        (
+            int(frame_scale_factor * frame_image.width),
+            int(frame_scale_factor * frame_image.height)
+        ),
+        Image.LANCZOS
+    )
 
     # Calculate position to paste the frame image at the bottom
     frame_x = (result_width - frame_width) // 2
@@ -226,7 +232,7 @@ async def get_merged_image(image_file: str, request: Request):
 
     # Convert combined image to bytes
     image_bytes = io.BytesIO()
-    combined_image.save(image_bytes, format="JPEG")
+    combined_image.save(image_bytes, format="JPEG", quality=95)
     image_bytes.seek(0)
 
     return StreamingResponse(image_bytes, media_type="image/jpeg")
