@@ -1,8 +1,8 @@
-from fastapi import FastAPI, File, UploadFile, HTTPException, Request, Form
+from fastapi import FastAPI, File, UploadFile, HTTPException, Request, Form, Query
 from fastapi.responses import StreamingResponse, HTMLResponse
 from PIL import Image, ImageOps, ImageDraw
 from ultralytics import YOLO
-from os import path, getcwd, environ, remove
+from os import path, getcwd, environ, remove, makedirs
 from uuid import uuid4
 import numpy as np
 import cv2
@@ -10,12 +10,15 @@ from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 from remove_background import remove_background
 import io
+import json
+from datetime import datetime
 
 load_dotenv()
 
 app = FastAPI()
 
 images_dir = path.join(getcwd(), 'saved_images')
+metadata_dir = path.join(getcwd(), 'metadata')
 frame_image_path = "assets/tourtelLogoHD.png"
 
 horizontal_displacement = 0
@@ -33,9 +36,14 @@ model = YOLO('yolov8s.pt')
 API_KEY = environ.get('API_KEY')
 SERVER_URL = environ.get('SERVER_URL')
 
+if not path.exists(images_dir):
+    makedirs(images_dir)
+if not path.exists(metadata_dir):
+    makedirs(metadata_dir)
+
 
 @app.post("/merge-images/")
-async def merge_images(files: list[UploadFile] = File(...)):
+async def merge_images(people_count: int = Query(...), files: list[UploadFile] = File(...)):
     base_pil_image = None
     temp_files = []
 
@@ -100,6 +108,15 @@ async def merge_images(files: list[UploadFile] = File(...)):
 
         # Save the merged image to the disk
         base_pil_image.save(merged_image_path, format='JPEG')
+
+        # Save metadata
+        metadata = {
+            "created_at": datetime.utcnow().isoformat(),
+            "people_count": people_count
+        }
+        metadata_path = path.join(metadata_dir, f"{merged_file_name}.json")
+        with open(metadata_path, 'w') as metadata_file:
+            json.dump(metadata, metadata_file)
 
         # Return the URL for fetching the merged image
         return {"message": "Images merged successfully", "image_url": f"{merged_file_name}"}
@@ -236,3 +253,15 @@ async def get_merged_image(image_file: str, request: Request):
     image_bytes.seek(0)
 
     return StreamingResponse(image_bytes, media_type="image/jpeg")
+
+
+@app.get("/metadata/{image_file}")
+async def get_image_metadata(image_file: str):
+    metadata_path = path.join(metadata_dir, f"{image_file}.json")
+    if not path.exists(metadata_path):
+        raise HTTPException(status_code=404, detail="Metadata not found")
+
+    with open(metadata_path, 'r') as metadata_file:
+        metadata = json.load(metadata_file)
+
+    return metadata
