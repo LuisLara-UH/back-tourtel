@@ -16,7 +16,7 @@ load_dotenv()
 app = FastAPI()
 
 images_dir = path.join(getcwd(), 'saved_images')
-frame_image_path = "assets/logos4x.png"
+frame_image_path = "assets/tourtelLogoHD.png"
 
 horizontal_displacement = 0
 
@@ -213,7 +213,7 @@ async def get_merged_image(image_file: str, request: Request):
     combined_image.paste(bordered_image, (0, padding))
 
     # Resize frame image to fit within the bottom area
-    frame_scale_factor = 0.35
+    frame_scale_factor = 0.125
     frame_width = int(frame_scale_factor * frame_image.width)
     frame_image = frame_image.resize(
         (
