@@ -2,7 +2,7 @@ from fastapi import FastAPI, File, UploadFile, HTTPException, Request, Form, Que
 from fastapi.responses import StreamingResponse, HTMLResponse
 from PIL import Image, ImageOps, ImageDraw
 from ultralytics import YOLO
-from os import path, getcwd, environ, remove, makedirs
+from os import path, getcwd, environ, remove, makedirs, listdir
 from uuid import uuid4
 import numpy as np
 import cv2
@@ -255,13 +255,15 @@ async def get_merged_image(image_file: str, request: Request):
     return StreamingResponse(image_bytes, media_type="image/jpeg")
 
 
-@app.get("/metadata/{image_file}")
-async def get_image_metadata(image_file: str):
-    metadata_path = path.join(metadata_dir, f"{image_file}.json")
-    if not path.exists(metadata_path):
-        raise HTTPException(status_code=404, detail="Metadata not found")
+@app.get("/metadata/")
+async def get_all_metadata():
+    metadata = []
+    files = listdir(metadata_dir)
 
-    with open(metadata_path, 'r') as metadata_file:
-        metadata = json.load(metadata_file)
+    for file in files:
+        if file.endswith('.json'):
+            file_path = path.join(metadata_dir, file)
+            with open(file_path, 'r') as metadata_file:
+                metadata.append(json.load(metadata_file))
 
     return metadata
