@@ -112,7 +112,7 @@ async def merge_images(people_count: int = Query(...), files: list[UploadFile] =
 
         # Save metadata
         metadata = {
-            "created_at": datetime.now(timezone('Europe/Paris')).isoformat(),
+            "created_at": datetime.now(timezone('Europe/Paris')).isoformat().astimezone(timezone('Europe/Paris')),
             "people_count": people_count
         }
         metadata_path = path.join(metadata_dir, f"{merged_file_name}.json")
@@ -266,11 +266,11 @@ async def get_all_metadata(start_datetime: str = Query(None), end_datetime: str 
             file_path = path.join(metadata_dir, file)
             with open(file_path, 'r') as metadata_file:
                 data = json.load(metadata_file)
-                created_at = datetime.fromisoformat(data["created_at"])
+                created_at = datetime.fromisoformat(data["created_at"]).astimezone(timezone('Europe/Paris'))
 
                 if start_datetime and end_datetime:
-                    start_dt = datetime.fromisoformat(start_datetime)
-                    end_dt = datetime.fromisoformat(end_datetime)
+                    start_dt = datetime.fromisoformat(start_datetime).astimezone(timezone('Europe/Paris'))
+                    end_dt = datetime.fromisoformat(end_datetime).astimezone(timezone('Europe/Paris'))
                     if start_dt <= created_at <= end_dt:
                         metadata.append(data)
                 else:
