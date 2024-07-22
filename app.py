@@ -11,7 +11,8 @@ from dotenv import load_dotenv
 from remove_background import remove_background
 import io
 import json
-from datetime import datetime, timezone
+from datetime import datetime
+from pytz import timezone
 
 load_dotenv()
 
@@ -111,7 +112,7 @@ async def merge_images(people_count: int = Query(...), files: list[UploadFile] =
 
         # Save metadata
         metadata = {
-            "created_at": datetime.now(timezone.tzname('Europe/France')),
+            "created_at": datetime.now(timezone('Europe/Paris')).isoformat(),
             "people_count": people_count
         }
         metadata_path = path.join(metadata_dir, f"{merged_file_name}.json")
