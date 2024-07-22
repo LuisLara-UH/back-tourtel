@@ -256,7 +256,7 @@ async def get_merged_image(image_file: str, request: Request):
 
 
 @app.get("/metadata/")
-async def get_all_metadata():
+async def get_all_metadata(start_datetime: str = Query(None), end_datetime: str = Query(None)):
     metadata = []
     files = listdir(metadata_dir)
 
@@ -264,6 +264,17 @@ async def get_all_metadata():
         if file.endswith('.json'):
             file_path = path.join(metadata_dir, file)
             with open(file_path, 'r') as metadata_file:
-                metadata.append(json.load(metadata_file))
+                data = json.load(metadata_file)
+                created_at = datetime.fromisoformat(data["created_at"])
+
+                if start_datetime and end_datetime:
+                    start_dt = datetime.fromisoformat(start_datetime)
+                    end_dt = datetime.fromisoformat(end_datetime)
+                    if start_dt <= created_at <= end_dt:
+                        metadata.append(data)
+                else:
+                    metadata.append(data)
+
+    metadata.sort(key=lambda x: x['created_at'])
 
     return metadata
