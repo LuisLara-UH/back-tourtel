@@ -112,7 +112,7 @@ async def merge_images(people_count: int = Query(...), files: list[UploadFile] =
 
         # Save metadata
         metadata = {
-            "created_at": datetime.now(timezone('Europe/Paris')).isoformat().astimezone(timezone('Europe/Paris')),
+            "created_at": datetime.now(timezone('Europe/Paris')).isoformat(),
             "people_count": people_count
         }
         metadata_path = path.join(metadata_dir, f"{merged_file_name}.json")
