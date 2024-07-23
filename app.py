@@ -207,10 +207,10 @@ async def get_merged_image(image_file: str, request: Request):
     frame_image = Image.open(frame_image_path)
 
     # Define resulting image dimensions
-    result_width = 892
-    result_height = 1206
-    padding = 0
-    border = 30
+    result_width = int(environ.get('RESULT_WIDTH', 892))
+    result_height = int(environ.get('RESULT_HEIGHT', 1206))
+    padding = int(environ.get('PADDING', 0))
+    border = int(environ.get('BORDER', 30))
 
     # Calculate new dimensions for the cropped image to fit the height and maintain aspect ratio
     scale_factor = ((result_height - 200) - 2 * border) / original_image.height
@@ -231,7 +231,7 @@ async def get_merged_image(image_file: str, request: Request):
     combined_image.paste(bordered_image, (0, padding))
 
     # Resize frame image to fit within the bottom area
-    frame_scale_factor = 0.3
+    frame_scale_factor = float(environ.get('FRAME_SCALE_FACTOR', 0.3))
     frame_width = int(frame_scale_factor * frame_image.width)
     frame_image = frame_image.resize(
         (
