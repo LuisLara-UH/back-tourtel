@@ -23,6 +23,7 @@ metadata_dir = path.join(getcwd(), 'metadata')
 frame_image_path = "assets/tourtelLogoHD.png"
 
 horizontal_displacement = 0
+vertical_displacement = 0
 
 app.add_middleware(
     CORSMiddleware,
@@ -180,6 +181,8 @@ async def crop_form():
             <form action="/crop-image/" method="post">
                 <label for="x_position">X-axis Position (pixels):</label>
                 <input type="number" id="x_position" name="x_position" value="0" required><br><br>
+                <label for="y_position">Y-axis Position (pixels):</label>
+                <input type="number" id="y_position" name="y_position" value="0" required><br><br>
                 <input type="submit" value="Set Cropped Image Position">
             </form>
         </body>
@@ -189,15 +192,16 @@ async def crop_form():
 
 
 @app.post("/crop-image/")
-async def crop_image(x_position: int = Form(0)):
-    global horizontal_displacement
+async def crop_image(x_position: int = Form(0), y_position: int = Form(0)):
+    global horizontal_displacement, vertical_displacement
     horizontal_displacement = x_position
-    return {"message": "Position value received", "x_position": x_position}
+    vertical_displacement = y_position
+    return {"message": "Position values received", "x_position": x_position, "y_position": y_position}
 
 
 @app.get("/image/{image_file}")
 async def get_merged_image(image_file: str, request: Request):
-    global horizontal_displacement
+    global horizontal_displacement, vertical_displacement
 
     image_path = path.join(images_dir, image_file)
     if not path.exists(image_path):
@@ -211,6 +215,7 @@ async def get_merged_image(image_file: str, request: Request):
     result_height = int(environ.get('RESULT_HEIGHT', 1206))
     padding = int(environ.get('PADDING', 0))
     border = int(environ.get('BORDER', 30))
+    vertical_crop_margin = int(environ.get('VERTICAL_CROP_MARGIN', 100))
 
     # Calculate new dimensions for the cropped image to fit the height and maintain aspect ratio
     scale_factor = ((result_height - 200) - 2 * border) / original_image.height
@@ -220,11 +225,14 @@ async def get_merged_image(image_file: str, request: Request):
     # Calculate cropping area for the original image
     left = (new_width - result_width + 2 * border) // 2 + horizontal_displacement
     right = left + result_width - 2 * border
-    cropped_image = original_image.resize((new_width, new_height), Image.LANCZOS).crop((left, 0, right, new_height))
+    top = border + 0.6*vertical_crop_margin + vertical_displacement
+    bottom = top + new_height - 2 * border - vertical_crop_margin
+
+    cropped_image = original_image.resize((new_width, new_height), Image.LANCZOS).crop((left, top, right, bottom))
 
     # Create a new canvas for the cropped image with a white border
-    bordered_image = Image.new("RGB", (result_width, new_height + 2 * border), "white")
-    bordered_image.paste(cropped_image, (border, border))
+    bordered_image = Image.new("RGB", (result_width, result_height), "white")
+    bordered_image.paste(cropped_image, (border, border + vertical_crop_margin))
 
     # Create the final combined image with padding
     combined_image = Image.new("RGB", (result_width, result_height), "white")
