@@ -38,3 +38,10 @@ This document explains the environment variables used in the FastAPI application
 - **Default Value**: 0.3
 - **Usage**: `FRAME_SCALE_FACTOR=0.3`
 - **Type**: Float
+
+### LOGO_Y_POSITION
+
+- **Description**: Defines the y position for the Tourtel Logo.
+- **Default Value**: 0
+- **Usage**: `LOGO_Y_POSITION=0`
+- **Type**: Integer

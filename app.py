@@ -251,7 +251,7 @@ async def get_merged_image(image_file: str, request: Request):
 
     # Calculate position to paste the frame image at the bottom
     frame_x = (result_width - frame_width) // 2
-    frame_y = result_height - padding - frame_image.height + 30
+    frame_y = result_height - padding - frame_image.height + int(environ.get('LOGO_Y_POSITION', 0))
 
     # Paste frame image on the combined image
     combined_image.paste(frame_image, (frame_x, frame_y), frame_image)
