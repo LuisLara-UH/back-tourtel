@@ -215,18 +215,18 @@ async def get_merged_image(image_file: str, request: Request):
     result_height = int(environ.get('RESULT_HEIGHT', 1206))
     padding = int(environ.get('PADDING', 0))
     border = int(environ.get('BORDER', 30))
-    vertical_crop_margin = int(environ.get('VERTICAL_CROP_MARGIN', 100))
+    vertical_crop_margin = int(environ.get('VERTICAL_CROP_MARGIN', 50))
 
     # Calculate new dimensions for the cropped image to fit the height and maintain aspect ratio
-    scale_factor = ((result_height - 200) - 2 * border) / original_image.height
+    scale_factor = ((result_height - 250) - 2 * border) / original_image.height
     new_height = int(original_image.height * scale_factor)
     new_width = int(original_image.width * scale_factor)
 
     # Calculate cropping area for the original image
     left = (new_width - result_width + 2 * border) // 2 + horizontal_displacement
     right = left + result_width - 2 * border
-    top = border + 0.6*vertical_crop_margin + vertical_displacement
-    bottom = top + new_height - 2 * border - vertical_crop_margin
+    top = 0.5*vertical_crop_margin + vertical_displacement
+    bottom = top + new_height - 0.6*vertical_crop_margin
 
     cropped_image = original_image.resize((new_width, new_height), Image.LANCZOS).crop((left, top, right, bottom))
 
@@ -251,7 +251,7 @@ async def get_merged_image(image_file: str, request: Request):
 
     # Calculate position to paste the frame image at the bottom
     frame_x = (result_width - frame_width) // 2
-    frame_y = result_height - padding - frame_image.height
+    frame_y = result_height - padding - frame_image.height + 30
 
     # Paste frame image on the combined image
     combined_image.paste(frame_image, (frame_x, frame_y), frame_image)
