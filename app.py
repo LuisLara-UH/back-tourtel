@@ -33,7 +33,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-model = YOLO('yolov8s.pt')
+model = YOLO('weights/yolov10x.pt')
 
 API_KEY = environ.get('API_KEY')
 SERVER_URL = environ.get('SERVER_URL')
@@ -61,48 +61,29 @@ async def merge_images(people_count: int = Query(...), files: list[UploadFile] =
             cv2.imwrite(temp_image_path, image)
             temp_files.append(temp_image_path)
 
+            # Convert image to PIL Image format for processing
+            image_pil = Image.fromarray(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
+
             if i == 0:
-                base_pil_image = Image.fromarray(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
-                continue
+                # For the first image, use it as the base image without removing the background
+                base_pil_image = image_pil.convert("RGBA")
+            else:
+                # Remove the background using the external API for subsequent images
+                output_image_path = path.join(images_dir, f"segmented_{uuid4().hex}.png")
+                remove_background(temp_image_path, output_image_path)
+                temp_files.append(output_image_path)
 
-            # Detect people in the current image
-            results = model([image])
+                # Open the segmented image
+                segmented_pil = Image.open(output_image_path)
 
-            for result in results:
-                boxes = result.boxes
-                for box in boxes:
-                    if box.cls == 0:  # Assuming class '0' represents 'person'
-                        # Extract the bounding box coordinates
-                        x1, y1, x2, y2 = box.xyxy[0].tolist()  # Convert tensor to list
+                # Convert the image to RGBA format to use the alpha channel as the mask
+                segmented_pil = segmented_pil.convert("RGBA")
 
-                        # Ensure coordinates are integers
-                        x1, y1, x2, y2 = map(int, [x1, y1, x2, y2])
+                # Paste the segmented image onto the base image using the alpha channel as the mask
+                base_pil_image.paste(segmented_pil, (0, 0), segmented_pil)
 
-                        # Extract the person from the image
-                        person_roi = image[y1:y2, x1:x2]
-
-                        # Convert ROI to PIL Image format for processing
-                        person_pil = Image.fromarray(cv2.cvtColor(person_roi, cv2.COLOR_BGR2RGB))
-
-                        # Save the person image temporarily to get a URL for the API request
-                        person_image_path = path.join(images_dir, f"person_{uuid4().hex}.jpg")
-                        person_pil.save(person_image_path)
-                        temp_files.append(person_image_path)
-
-                        # Remove the background using the external API
-                        output_image_path = path.join(images_dir, f"person_segmented_{uuid4().hex}.png")
-                        remove_background(person_image_path, output_image_path)
-                        temp_files.append(output_image_path)
-
-                        # Open the segmented image
-                        segmented_person_pil = Image.open(output_image_path)
-
-                        # Convert the image to RGBA format to use the alpha channel as the mask
-                        segmented_person_pil = segmented_person_pil.convert("RGBA")
-                        mask_pil = segmented_person_pil.split()[-1]  # Get the alpha channel as mask
-
-                        # Paste the segmented person onto the base image with the mask
-                        base_pil_image.paste(segmented_person_pil, (x1, y1), mask_pil)
+        # Convert the final image to 'RGB' before saving as JPEG
+        base_pil_image = base_pil_image.convert("RGB")
 
         # Generate a unique filename for the merged image
         merged_file_name = f"{uuid4().hex}.jpg"
